@@ -1,40 +1,66 @@
 # Performance Analysis Tool
 
-A simple static website for performing statistical analysis on performance test data. Compare "before" and "after" timing measurements to determine if changes resulted in statistically significant improvements or regressions.
+A static website providing statistical analysis tools for performance testing. Compare before/after data, analyze multi-variate experiments, and determine algorithm time complexity - all in the browser with no server required.
 
-## Features
+## Tools
 
-- **Statistical Analysis**: Uses Welch's t-test to compare two groups with unequal variances
-- **Effect Size**: Calculates Cohen's d to measure practical significance
-- **Descriptive Statistics**: Mean, median, standard deviation, quartiles, and more
-- **Interactive Charts**: Histogram, box plot, and scatter plot visualizations
-- **Confidence Levels**: Clear interpretation of statistical significance
-- **No Dependencies**: Pure vanilla JavaScript - no build step required
+### 1. Before/After Analysis
+Compare two groups of timing data to determine if there's a statistically significant difference.
+
+**Features:**
+- Welch's t-test for comparing means with unequal variances
+- Cohen's d effect size calculation
+- Descriptive statistics (mean, median, std dev, quartiles)
+- Interactive visualizations (histogram, box plot, scatter plot)
+- Clear confidence level interpretation
+
+### 2. Multi-Variate Analysis
+Analyze the impact of multiple treatments/variables on performance.
+
+**Features:**
+- Define multiple treatments (e.g., "Caching", "CDN", "Compression")
+- Create groups with different treatment combinations
+- Estimate individual treatment effects using statistical comparison
+- Visualize treatment impacts and group comparisons
+- Identify which treatments significantly improve or worsen performance
+
+### 3. Time Complexity Fitter
+Determine the likely time complexity class of an algorithm from empirical data.
+
+**Features:**
+- Fits data to common complexity classes: O(1), O(log n), O(n), O(n log n), O(n²), O(n³), O(2ⁿ)
+- R² goodness-of-fit scores for each class
+- Visual comparison of actual data vs. fitted curves
+- Practical interpretation of results
 
 ## Usage
 
 1. Open `index.html` in a web browser
-2. Enter timing values for the "Before" (control) group
-3. Enter timing values for the "After" (treatment) group
-4. Click "Analyze Performance" to see results
+2. Select a tool using the tab navigation
+3. Enter your data or click "Load Sample Data" to see an example
+4. Click the analyze button to see results
 
-### Input Format
+### Input Formats
 
-Values can be entered:
+**Before/After & Multi-Variate:**
 - Comma-separated: `120, 135, 128, 142`
-- One per line:
-  ```
-  120
-  135
-  128
-  ```
+- One per line
 - Space or tab separated
+
+**Time Complexity:**
+- One pair per line: `n, time`
+- Example:
+  ```
+  100, 5
+  200, 12
+  400, 45
+  ```
 
 ## Hosting on GitHub Pages
 
 1. Push this repository to GitHub
 2. Go to repository Settings → Pages
-3. Select "Deploy from a branch" and choose `main` (or your branch)
+3. Select "Deploy from a branch" and choose your branch
 4. The site will be available at `https://<username>.github.io/<repo-name>/`
 
 ## Statistical Methods
@@ -48,20 +74,23 @@ Used instead of Student's t-test because it doesn't assume equal variances betwe
 - **Medium**: 0.5 ≤ |d| < 0.8
 - **Large**: |d| ≥ 0.8
 
-### Confidence Levels
-- **Very High (99.9%)**: p < 0.001
-- **High (99%)**: p < 0.01
-- **Moderate (95%)**: p < 0.05
-- **Low (90%)**: p < 0.1
-- **Insufficient**: p ≥ 0.1
+### R² (Coefficient of Determination)
+For time complexity fitting, R² indicates how well the complexity model fits the data:
+- **> 0.95**: Excellent fit
+- **0.85 - 0.95**: Good fit
+- **< 0.85**: Moderate fit, consider more data points
 
 ## Files
 
-- `index.html` - Main HTML structure
-- `style.css` - Styling and layout
+- `index.html` - Main HTML structure with tabbed interface
+- `style.css` - Styling and responsive layout
 - `stats.js` - Statistical analysis functions
 - `charts.js` - Canvas-based chart rendering
-- `app.js` - Main application logic
+- `app.js` - Main application logic for all tools
+
+## Browser Support
+
+Works in all modern browsers (Chrome, Firefox, Safari, Edge). No build step or dependencies required.
 
 ## License
 
