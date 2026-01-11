@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Analysis Tool</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Performance Analysis Tool</h1>
+            <p class="subtitle">Compare before/after performance data with statistical confidence</p>
+        </header>
+
+        <main>
+            <section class="input-section">
+                <div class="input-group">
+                    <div class="input-card">
+                        <h2>Before (Control)</h2>
+                        <label for="before-data">Enter timing values (comma or newline separated):</label>
+                        <textarea id="before-data" placeholder="e.g., 120, 135, 128, 142, 131&#10;or one value per line:&#10;120&#10;135&#10;128"></textarea>
+                        <div class="quick-stats" id="before-stats"></div>
+                    </div>
+
+                    <div class="input-card">
+                        <h2>After (Treatment)</h2>
+                        <label for="after-data">Enter timing values (comma or newline separated):</label>
+                        <textarea id="after-data" placeholder="e.g., 98, 105, 112, 95, 108&#10;or one value per line:&#10;98&#10;105&#10;112"></textarea>
+                        <div class="quick-stats" id="after-stats"></div>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button id="analyze-btn" class="primary-btn">Analyze Performance</button>
+                    <button id="clear-btn" class="secondary-btn">Clear All</button>
+                    <button id="sample-btn" class="secondary-btn">Load Sample Data</button>
+                </div>
+            </section>
+
+            <section class="results-section" id="results" style="display: none;">
+                <h2>Analysis Results</h2>
+
+                <div class="summary-card" id="summary">
+                    <!-- Summary will be injected here -->
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card" id="before-summary">
+                        <h3>Before (Control)</h3>
+                        <div class="stat-content"></div>
+                    </div>
+                    <div class="stat-card" id="after-summary">
+                        <h3>After (Treatment)</h3>
+                        <div class="stat-content"></div>
+                    </div>
+                    <div class="stat-card" id="comparison-summary">
+                        <h3>Comparison</h3>
+                        <div class="stat-content"></div>
+                    </div>
+                </div>
+
+                <div class="charts-section">
+                    <div class="chart-container">
+                        <h3>Distribution Comparison</h3>
+                        <canvas id="histogram-chart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Box Plot Comparison</h3>
+                        <canvas id="boxplot-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-container full-width">
+                    <h3>Data Points Overlay</h3>
+                    <canvas id="scatter-chart"></canvas>
+                </div>
+
+                <div class="interpretation-card" id="interpretation">
+                    <!-- Interpretation will be injected here -->
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Performance Analysis Tool - A simple statistical comparison for performance testing</p>
+            <p class="note">Uses Welch's t-test for comparing means with unequal variances</p>
+        </footer>
+    </div>
+
+    <script src="stats.js"></script>
+    <script src="charts.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
