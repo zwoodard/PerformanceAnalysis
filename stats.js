@@ -570,10 +570,37 @@ const Stats = {
      */
     fitComplexity: function(data, complexityClass) {
         const transform = this.complexityClasses[complexityClass].transform;
+        const times = data.map(d => d.time);
+        const nValues = data.map(d => d.n);
+
+        // Special case for O(1): can't use linear regression since all x values become 1
+        // Instead, measure how well a constant (no dependence on n) fits the data
+        if (complexityClass === 'O(1)') {
+            const meanTime = this.mean(times);
+
+            // Calculate R² by comparing variance explained by O(1) model (constant)
+            // vs variance explained by a linear model (time depends on n)
+            const ssTotal = times.reduce((sum, t) => sum + Math.pow(t - meanTime, 2), 0);
+
+            // For O(1), predicted = mean for all points, so ssResidual = ssTotal
+            // But we want to compare: does assuming O(1) explain the data well?
+            // We do this by checking if there's actually a relationship with n
+            const linearFit = this.linearRegression(nValues, times);
+
+            // If the linear fit has low R², it means time doesn't depend on n, so O(1) is good
+            // Invert the linear R² to get O(1) "goodness of fit"
+            const o1RSquared = 1 - linearFit.rSquared;
+
+            return {
+                rSquared: Math.max(0, o1RSquared),
+                coefficient: 0,
+                constant: meanTime,
+                complexityClass: complexityClass
+            };
+        }
 
         // Transform n values
         const transformedN = data.map(d => transform(d.n));
-        const times = data.map(d => d.time);
 
         // Handle edge cases
         if (transformedN.some(v => !isFinite(v) || isNaN(v))) {
