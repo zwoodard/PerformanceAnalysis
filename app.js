@@ -230,6 +230,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const mvClearBtn = document.getElementById('mv-clear-btn');
     const mvSampleBtn = document.getElementById('mv-sample-btn');
     const mvResults = document.getElementById('mv-results');
+    const mvCsvInput = document.getElementById('mv-csv-input');
+    const mvImportCsvBtn = document.getElementById('mv-import-csv');
+    const mvCsvStatus = document.getElementById('mv-csv-status');
 
     let mvGroupCounter = 0;
 
@@ -490,6 +493,9 @@ document.addEventListener('DOMContentLoaded', function() {
         mvGroupList.innerHTML = '';
         mvGroupCounter = 0;
         mvResults.style.display = 'none';
+        mvCsvInput.value = '';
+        mvCsvStatus.textContent = '';
+        mvCsvStatus.className = 'csv-status';
     }
 
     function loadMVSampleData() {
@@ -510,6 +516,142 @@ document.addEventListener('DOMContentLoaded', function() {
             addMVGroup('Both', { 'Caching': true, 'CDN': true }, '150, 145, 160, 155, 148, 162, 153, 147, 158, 151');
         }, 100);
     }
+
+    // CSV Import functionality
+    function parseCSVLine(line) {
+        // Simple CSV parser that handles quoted fields
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current.trim());
+        return result;
+    }
+
+    function parseTreatmentsFromHeader(header) {
+        // Parse treatment names from header, supporting +, |, or , as separators
+        // But also handle the case where header might just be a group name
+        const trimmed = header.trim();
+        if (!trimmed) return [];
+
+        // Try splitting by different separators
+        let treatments;
+        if (trimmed.includes('+')) {
+            treatments = trimmed.split('+');
+        } else if (trimmed.includes('|')) {
+            treatments = trimmed.split('|');
+        } else if (trimmed.includes(',')) {
+            treatments = trimmed.split(',');
+        } else {
+            // Single treatment or group name
+            treatments = [trimmed];
+        }
+
+        return treatments.map(t => t.trim()).filter(t => t !== '');
+    }
+
+    function importCSV() {
+        const csvText = mvCsvInput.value.trim();
+        if (!csvText) {
+            mvCsvStatus.textContent = 'Please paste CSV data first';
+            mvCsvStatus.className = 'csv-status error';
+            return;
+        }
+
+        const lines = csvText.split('\n').map(l => l.trim()).filter(l => l !== '');
+        if (lines.length < 2) {
+            mvCsvStatus.textContent = 'CSV must have header row and at least one data row';
+            mvCsvStatus.className = 'csv-status error';
+            return;
+        }
+
+        // Parse header row
+        const headers = parseCSVLine(lines[0]);
+        if (headers.length === 0) {
+            mvCsvStatus.textContent = 'No columns found in header';
+            mvCsvStatus.className = 'csv-status error';
+            return;
+        }
+
+        // Extract all unique treatment names from headers
+        const allTreatments = new Set();
+        const groupTreatments = []; // For each column, which treatments apply
+
+        headers.forEach(header => {
+            const treatments = parseTreatmentsFromHeader(header);
+            groupTreatments.push(treatments);
+            treatments.forEach(t => allTreatments.add(t));
+        });
+
+        const treatmentNames = Array.from(allTreatments).sort();
+
+        // Parse data rows - each column becomes measurements for that group
+        const groupData = headers.map(() => []);
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = parseCSVLine(lines[i]);
+            values.forEach((val, colIndex) => {
+                if (colIndex < groupData.length) {
+                    const num = parseFloat(val);
+                    if (!isNaN(num)) {
+                        groupData[colIndex].push(num);
+                    }
+                }
+            });
+        }
+
+        // Check we have valid data
+        const validGroups = groupData.filter(d => d.length > 0).length;
+        if (validGroups === 0) {
+            mvCsvStatus.textContent = 'No valid numeric data found';
+            mvCsvStatus.className = 'csv-status error';
+            return;
+        }
+
+        // Clear existing treatments and groups
+        mvTreatmentsList.innerHTML = '';
+        mvGroupList.innerHTML = '';
+        mvGroupCounter = 0;
+
+        // Add treatments
+        treatmentNames.forEach(name => {
+            addMVTreatment(name);
+        });
+
+        // Add groups after a brief delay to let treatments render
+        setTimeout(() => {
+            headers.forEach((header, colIndex) => {
+                const data = groupData[colIndex];
+                if (data.length === 0) return;
+
+                const groupTreatmentNames = groupTreatments[colIndex];
+                const treatments = {};
+                treatmentNames.forEach(t => {
+                    treatments[t] = groupTreatmentNames.includes(t);
+                });
+
+                // Use header as group name
+                const groupName = header || `Group ${colIndex + 1}`;
+                addMVGroup(groupName, treatments, data.join(', '));
+            });
+
+            mvCsvStatus.textContent = `Imported ${validGroups} groups with ${treatmentNames.length} treatments`;
+            mvCsvStatus.className = 'csv-status success';
+        }, 100);
+    }
+
+    mvImportCsvBtn.addEventListener('click', importCSV);
 
     mvAddTreatmentBtn.addEventListener('click', () => addMVTreatment());
     mvAddGroupBtn.addEventListener('click', () => addMVGroup());

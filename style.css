@@ -509,6 +509,73 @@ button.small {
 }
 
 /* Multi-Variate Specific Styles */
+
+/* CSV Import Section */
+.mv-import-section {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.mv-import-section h3 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.mv-import-section code {
+    background: var(--bg-primary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.mv-import-section textarea {
+    height: 100px;
+    font-size: 0.85rem;
+}
+
+.csv-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+
+.csv-status {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.csv-status.success {
+    color: var(--success-color);
+}
+
+.csv-status.error {
+    color: var(--danger-color);
+}
+
+.mv-separator {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 1.5rem 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.mv-separator::before,
+.mv-separator::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.mv-separator span {
+    padding: 0 1rem;
+}
+
 .mv-controls {
     background: var(--bg-card);
     border-radius: 12px;

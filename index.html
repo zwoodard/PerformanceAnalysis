@@ -99,6 +99,20 @@
                 </div>
 
                 <div class="input-section">
+                    <div class="mv-import-section">
+                        <h3>Import CSV Data</h3>
+                        <p class="help-text">Paste CSV data where each column is a treatment group. Headers should list treatments separated by <code>+</code>, <code>,</code>, or <code>|</code>. Data rows contain measurements.</p>
+                        <textarea id="mv-csv-input" placeholder="A,A + B,A + B + C,B,B + C,C&#10;120,115,108,125,112,118&#10;118,112,105,128,115,120"></textarea>
+                        <div class="csv-controls">
+                            <button id="mv-import-csv" class="secondary-btn">Import CSV</button>
+                            <span class="csv-status" id="mv-csv-status"></span>
+                        </div>
+                    </div>
+
+                    <div class="mv-separator">
+                        <span>or manually configure</span>
+                    </div>
+
                     <div class="mv-controls">
                         <div class="treatment-setup">
                             <h3>Define Treatments</h3>
