@@ -324,9 +324,10 @@ document.addEventListener('DOMContentLoaded', function() {
         return groups;
     }
 
-    function renderMVSummary(results) {
+    function renderMVSummary(results, designCheck) {
         const summary = document.getElementById('mv-summary');
         const significantTreatments = results.treatments.filter(t => t.isSignificant && !t.insufficient);
+        const confoundedTreatments = results.treatments.filter(t => t.confounded);
 
         let verdictText, verdictClass;
         if (significantTreatments.length === 0) {
@@ -337,11 +338,17 @@ document.addEventListener('DOMContentLoaded', function() {
             verdictClass = 'good';
         }
 
+        // Only warn if some treatments are confounded
+        const designWarning = confoundedTreatments.length > 0
+            ? `<div class="sub-verdict" style="color: #f59e0b; margin-top: 0.5rem;">⚠ ${confoundedTreatments.length} treatment${confoundedTreatments.length > 1 ? 's' : ''} estimated via marginal comparison (may be confounded)</div>`
+            : '';
+
         summary.className = `summary-card ${verdictClass}`;
         summary.innerHTML = `
             <h3>Multi-Variate Analysis Result</h3>
             <div class="verdict ${verdictClass}">${verdictText}</div>
             <div class="sub-verdict">Analyzed ${results.groups.length} groups with ${results.treatments.length} treatments</div>
+            ${designWarning}
         `;
     }
 
@@ -359,19 +366,67 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             const isImprovement = t.percentEffect < 0;
             const valueClass = t.isSignificant ? (isImprovement ? 'positive' : 'negative') : 'neutral';
+            const methodNote = t.confounded
+                ? '<div class="effect-detail" style="color: #f59e0b; font-size: 0.75rem;">⚠ Confounded estimate</div>'
+                : '';
             return `
                 <div class="effect-card">
                     <h4>${t.name}</h4>
                     <div class="effect-value ${valueClass}">${t.percentEffect > 0 ? '+' : ''}${formatNumber(t.percentEffect)}%</div>
                     <div class="effect-detail">${t.isSignificant ? 'Significant' : 'Not significant'} (p=${formatNumber(t.pValue, 3)})</div>
+                    ${methodNote}
                 </div>
             `;
         }).join('');
     }
 
-    function renderMVInterpretation(results) {
+    function checkFactorialDesign(groups, treatmentNames) {
+        // Check if we have a full factorial design (all 2^k combinations)
+        const expectedCombinations = Math.pow(2, treatmentNames.length);
+        const actualCombinations = new Set();
+
+        groups.forEach(group => {
+            // Create a signature for this combination
+            const sig = treatmentNames.map(t => group.treatments[t] ? '1' : '0').join('');
+            actualCombinations.add(sig);
+        });
+
+        const missingCount = expectedCombinations - actualCombinations.size;
+        const isComplete = missingCount === 0;
+
+        // Check balance - each treatment should appear in equal number of groups with/without
+        const balance = {};
+        treatmentNames.forEach(t => {
+            const withCount = groups.filter(g => g.treatments[t]).length;
+            const withoutCount = groups.filter(g => !g.treatments[t]).length;
+            balance[t] = { with: withCount, without: withoutCount, balanced: withCount === withoutCount };
+        });
+
+        const unbalanced = treatmentNames.filter(t => !balance[t].balanced);
+
+        return { isComplete, missingCount, expectedCombinations, actualCombinations: actualCombinations.size, balance, unbalanced };
+    }
+
+    function renderMVInterpretation(results, designCheck) {
         const interpretation = document.getElementById('mv-interpretation');
         const insights = [];
+
+        // Check for confounded treatments
+        const confoundedTreatments = results.treatments.filter(t => t.confounded);
+        const pairwiseTreatments = results.treatments.filter(t => t.method === 'pairwise');
+
+        // Methodology explanation
+        if (pairwiseTreatments.length > 0 && confoundedTreatments.length === 0) {
+            insights.push('<strong style="color: #10b981;">✓ Pairwise comparison:</strong> All treatment effects were isolated by comparing groups that differ by exactly one treatment. Results are reliable.');
+        } else if (confoundedTreatments.length > 0) {
+            let warning = '<strong style="color: #f59e0b;">⚠ Mixed methodology:</strong> ';
+            if (pairwiseTreatments.length > 0) {
+                warning += `${pairwiseTreatments.map(t => t.name).join(', ')} used pairwise comparison (reliable). `;
+            }
+            warning += `${confoundedTreatments.map(t => t.name).join(', ')} used marginal comparison (may be confounded). `;
+            warning += 'To get accurate estimates for confounded treatments, add groups that isolate their effect (e.g., a group with only that treatment applied).';
+            insights.push(warning);
+        }
 
         const significant = results.treatments.filter(t => t.isSignificant && !t.insufficient);
         const improving = significant.filter(t => t.percentEffect < 0);
@@ -412,10 +467,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const results = Stats.analyzeMultiVariate(groups, treatmentNames);
+        const designCheck = checkFactorialDesign(groups, treatmentNames);
 
-        renderMVSummary(results);
+        renderMVSummary(results, designCheck);
         renderMVEffects(results);
-        renderMVInterpretation(results);
+        renderMVInterpretation(results, designCheck);
 
         mvResults.style.display = 'block';
 

@@ -316,7 +316,7 @@ const Stats = {
 
     /**
      * Analyze multi-variate data to estimate treatment effects
-     * Uses a simple approach: compare groups with/without each treatment
+     * Uses pairwise comparison to isolate individual treatment effects
      * @param {Array} groups - Array of {name, treatments: {treatmentName: bool}, data: [numbers]}
      * @param {Array} treatmentNames - Array of treatment names
      */
@@ -330,13 +330,17 @@ const Stats = {
 
         // Calculate stats for each group
         let allData = [];
+        const groupStats = [];
         groups.forEach(group => {
             const stats = this.describeSample(group.data);
-            results.groups.push({
+            const groupInfo = {
                 name: group.name,
                 treatments: group.treatments,
-                stats: stats
-            });
+                stats: stats,
+                treatmentSignature: treatmentNames.map(t => group.treatments[t] ? '1' : '0').join('')
+            };
+            results.groups.push(groupInfo);
+            groupStats.push(groupInfo);
             allData = allData.concat(group.data);
         });
 
@@ -357,47 +361,121 @@ const Stats = {
             results.baseline = results.groups[baselineGroup];
         }
 
-        // Estimate effect of each treatment
+        // Estimate effect of each treatment using pairwise comparison
+        // Find pairs of groups that differ by exactly one treatment
         treatmentNames.forEach(treatmentName => {
-            const withTreatment = [];
-            const withoutTreatment = [];
+            const pairwiseEffects = [];
 
-            groups.forEach(group => {
-                if (group.treatments[treatmentName]) {
-                    withTreatment.push(...group.data);
-                } else {
-                    withoutTreatment.push(...group.data);
+            // Look for pairs where only this treatment differs
+            for (let i = 0; i < groupStats.length; i++) {
+                for (let j = 0; j < groupStats.length; j++) {
+                    if (i === j) continue;
+
+                    const g1 = groupStats[i];
+                    const g2 = groupStats[j];
+
+                    // Check if g2 has treatment and g1 doesn't, and all other treatments are the same
+                    if (!g1.treatments[treatmentName] && g2.treatments[treatmentName]) {
+                        let otherTreatmentsSame = true;
+                        for (const t of treatmentNames) {
+                            if (t !== treatmentName && g1.treatments[t] !== g2.treatments[t]) {
+                                otherTreatmentsSame = false;
+                                break;
+                            }
+                        }
+
+                        if (otherTreatmentsSame) {
+                            // Found a valid pair! g1 is "without", g2 is "with"
+                            const effect = g2.stats.mean - g1.stats.mean;
+                            const percentEffect = this.percentageChange(g1.stats.mean, g2.stats.mean);
+                            pairwiseEffects.push({
+                                withoutGroup: g1.name,
+                                withGroup: g2.name,
+                                effect: effect,
+                                percentEffect: percentEffect,
+                                withoutMean: g1.stats.mean,
+                                withMean: g2.stats.mean,
+                                withoutData: groups[i].data,
+                                withData: groups[j].data
+                            });
+                        }
+                    }
                 }
-            });
+            }
 
-            if (withTreatment.length >= 2 && withoutTreatment.length >= 2) {
-                const withMean = this.mean(withTreatment);
-                const withoutMean = this.mean(withoutTreatment);
-                const effect = withMean - withoutMean;
-                const percentEffect = this.percentageChange(withoutMean, withMean);
-                const tTest = this.welchTTest(withoutTreatment, withTreatment);
+            if (pairwiseEffects.length > 0) {
+                // Average the pairwise effects if multiple pairs found
+                const avgEffect = this.mean(pairwiseEffects.map(p => p.effect));
+                const avgPercentEffect = this.mean(pairwiseEffects.map(p => p.percentEffect));
+
+                // Combine data from all valid pairs for statistical test
+                const allWithData = [];
+                const allWithoutData = [];
+                pairwiseEffects.forEach(p => {
+                    allWithData.push(...p.withData);
+                    allWithoutData.push(...p.withoutData);
+                });
+
+                const tTest = this.welchTTest(allWithoutData, allWithData);
 
                 results.treatments.push({
                     name: treatmentName,
-                    effect: effect,
-                    percentEffect: percentEffect,
-                    withMean: withMean,
-                    withoutMean: withoutMean,
-                    withN: withTreatment.length,
-                    withoutN: withoutTreatment.length,
+                    effect: avgEffect,
+                    percentEffect: avgPercentEffect,
+                    withMean: this.mean(allWithData),
+                    withoutMean: this.mean(allWithoutData),
+                    withN: allWithData.length,
+                    withoutN: allWithoutData.length,
                     pValue: tTest.pValue,
                     isSignificant: tTest.pValue < 0.05,
-                    interpretation: this.interpretPValue(tTest.pValue)
+                    interpretation: this.interpretPValue(tTest.pValue),
+                    pairCount: pairwiseEffects.length,
+                    method: 'pairwise'
                 });
             } else {
-                results.treatments.push({
-                    name: treatmentName,
-                    effect: null,
-                    percentEffect: null,
-                    insufficient: true,
-                    withN: withTreatment.length,
-                    withoutN: withoutTreatment.length
+                // Fallback to marginal comparison (less accurate, will trigger warning)
+                const withTreatment = [];
+                const withoutTreatment = [];
+
+                groups.forEach(group => {
+                    if (group.treatments[treatmentName]) {
+                        withTreatment.push(...group.data);
+                    } else {
+                        withoutTreatment.push(...group.data);
+                    }
                 });
+
+                if (withTreatment.length >= 2 && withoutTreatment.length >= 2) {
+                    const withMean = this.mean(withTreatment);
+                    const withoutMean = this.mean(withoutTreatment);
+                    const effect = withMean - withoutMean;
+                    const percentEffect = this.percentageChange(withoutMean, withMean);
+                    const tTest = this.welchTTest(withoutTreatment, withTreatment);
+
+                    results.treatments.push({
+                        name: treatmentName,
+                        effect: effect,
+                        percentEffect: percentEffect,
+                        withMean: withMean,
+                        withoutMean: withoutMean,
+                        withN: withTreatment.length,
+                        withoutN: withoutTreatment.length,
+                        pValue: tTest.pValue,
+                        isSignificant: tTest.pValue < 0.05,
+                        interpretation: this.interpretPValue(tTest.pValue),
+                        method: 'marginal',
+                        confounded: true
+                    });
+                } else {
+                    results.treatments.push({
+                        name: treatmentName,
+                        effect: null,
+                        percentEffect: null,
+                        insufficient: true,
+                        withN: withTreatment.length,
+                        withoutN: withoutTreatment.length
+                    });
+                }
             }
         });
 
