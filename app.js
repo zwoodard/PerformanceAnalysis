@@ -327,6 +327,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderMVSummary(results, designCheck) {
         const summary = document.getElementById('mv-summary');
         const significantTreatments = results.treatments.filter(t => t.isSignificant && !t.insufficient);
+        const confoundedTreatments = results.treatments.filter(t => t.confounded);
 
         let verdictText, verdictClass;
         if (significantTreatments.length === 0) {
@@ -337,8 +338,9 @@ document.addEventListener('DOMContentLoaded', function() {
             verdictClass = 'good';
         }
 
-        const designWarning = (!designCheck.isComplete || designCheck.unbalanced.length > 0)
-            ? `<div class="sub-verdict" style="color: #f59e0b; margin-top: 0.5rem;">⚠ Incomplete factorial design - results may be confounded</div>`
+        // Only warn if some treatments are confounded
+        const designWarning = confoundedTreatments.length > 0
+            ? `<div class="sub-verdict" style="color: #f59e0b; margin-top: 0.5rem;">⚠ ${confoundedTreatments.length} treatment${confoundedTreatments.length > 1 ? 's' : ''} estimated via marginal comparison (may be confounded)</div>`
             : '';
 
         summary.className = `summary-card ${verdictClass}`;
@@ -364,11 +366,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             const isImprovement = t.percentEffect < 0;
             const valueClass = t.isSignificant ? (isImprovement ? 'positive' : 'negative') : 'neutral';
+            const methodNote = t.confounded
+                ? '<div class="effect-detail" style="color: #f59e0b; font-size: 0.75rem;">⚠ Confounded estimate</div>'
+                : '';
             return `
                 <div class="effect-card">
                     <h4>${t.name}</h4>
                     <div class="effect-value ${valueClass}">${t.percentEffect > 0 ? '+' : ''}${formatNumber(t.percentEffect)}%</div>
                     <div class="effect-detail">${t.isSignificant ? 'Significant' : 'Not significant'} (p=${formatNumber(t.pValue, 3)})</div>
+                    ${methodNote}
                 </div>
             `;
         }).join('');
@@ -405,16 +411,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const interpretation = document.getElementById('mv-interpretation');
         const insights = [];
 
-        // Design warnings first
-        if (!designCheck.isComplete || designCheck.unbalanced.length > 0) {
-            let warning = '<strong style="color: #f59e0b;">⚠ Experimental Design Warning:</strong> ';
-            if (!designCheck.isComplete) {
-                warning += `You have ${designCheck.actualCombinations} of ${designCheck.expectedCombinations} possible treatment combinations. `;
+        // Check for confounded treatments
+        const confoundedTreatments = results.treatments.filter(t => t.confounded);
+        const pairwiseTreatments = results.treatments.filter(t => t.method === 'pairwise');
+
+        // Methodology explanation
+        if (pairwiseTreatments.length > 0 && confoundedTreatments.length === 0) {
+            insights.push('<strong style="color: #10b981;">✓ Pairwise comparison:</strong> All treatment effects were isolated by comparing groups that differ by exactly one treatment. Results are reliable.');
+        } else if (confoundedTreatments.length > 0) {
+            let warning = '<strong style="color: #f59e0b;">⚠ Mixed methodology:</strong> ';
+            if (pairwiseTreatments.length > 0) {
+                warning += `${pairwiseTreatments.map(t => t.name).join(', ')} used pairwise comparison (reliable). `;
             }
-            if (designCheck.unbalanced.length > 0) {
-                warning += `Unbalanced treatments: ${designCheck.unbalanced.join(', ')}. `;
-            }
-            warning += 'For accurate effect estimates, use a <strong>full factorial design</strong> (all treatment combinations). With incomplete designs, treatment effects may be confounded—the estimated effect of one treatment may include effects from others.';
+            warning += `${confoundedTreatments.map(t => t.name).join(', ')} used marginal comparison (may be confounded). `;
+            warning += 'To get accurate estimates for confounded treatments, add groups that isolate their effect (e.g., a group with only that treatment applied).';
             insights.push(warning);
         }
 
