@@ -324,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return groups;
     }
 
-    function renderMVSummary(results) {
+    function renderMVSummary(results, designCheck) {
         const summary = document.getElementById('mv-summary');
         const significantTreatments = results.treatments.filter(t => t.isSignificant && !t.insufficient);
 
@@ -337,11 +337,16 @@ document.addEventListener('DOMContentLoaded', function() {
             verdictClass = 'good';
         }
 
+        const designWarning = (!designCheck.isComplete || designCheck.unbalanced.length > 0)
+            ? `<div class="sub-verdict" style="color: #f59e0b; margin-top: 0.5rem;">⚠ Incomplete factorial design - results may be confounded</div>`
+            : '';
+
         summary.className = `summary-card ${verdictClass}`;
         summary.innerHTML = `
             <h3>Multi-Variate Analysis Result</h3>
             <div class="verdict ${verdictClass}">${verdictText}</div>
             <div class="sub-verdict">Analyzed ${results.groups.length} groups with ${results.treatments.length} treatments</div>
+            ${designWarning}
         `;
     }
 
@@ -369,9 +374,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }).join('');
     }
 
-    function renderMVInterpretation(results) {
+    function checkFactorialDesign(groups, treatmentNames) {
+        // Check if we have a full factorial design (all 2^k combinations)
+        const expectedCombinations = Math.pow(2, treatmentNames.length);
+        const actualCombinations = new Set();
+
+        groups.forEach(group => {
+            // Create a signature for this combination
+            const sig = treatmentNames.map(t => group.treatments[t] ? '1' : '0').join('');
+            actualCombinations.add(sig);
+        });
+
+        const missingCount = expectedCombinations - actualCombinations.size;
+        const isComplete = missingCount === 0;
+
+        // Check balance - each treatment should appear in equal number of groups with/without
+        const balance = {};
+        treatmentNames.forEach(t => {
+            const withCount = groups.filter(g => g.treatments[t]).length;
+            const withoutCount = groups.filter(g => !g.treatments[t]).length;
+            balance[t] = { with: withCount, without: withoutCount, balanced: withCount === withoutCount };
+        });
+
+        const unbalanced = treatmentNames.filter(t => !balance[t].balanced);
+
+        return { isComplete, missingCount, expectedCombinations, actualCombinations: actualCombinations.size, balance, unbalanced };
+    }
+
+    function renderMVInterpretation(results, designCheck) {
         const interpretation = document.getElementById('mv-interpretation');
         const insights = [];
+
+        // Design warnings first
+        if (!designCheck.isComplete || designCheck.unbalanced.length > 0) {
+            let warning = '<strong style="color: #f59e0b;">⚠ Experimental Design Warning:</strong> ';
+            if (!designCheck.isComplete) {
+                warning += `You have ${designCheck.actualCombinations} of ${designCheck.expectedCombinations} possible treatment combinations. `;
+            }
+            if (designCheck.unbalanced.length > 0) {
+                warning += `Unbalanced treatments: ${designCheck.unbalanced.join(', ')}. `;
+            }
+            warning += 'For accurate effect estimates, use a <strong>full factorial design</strong> (all treatment combinations). With incomplete designs, treatment effects may be confounded—the estimated effect of one treatment may include effects from others.';
+            insights.push(warning);
+        }
 
         const significant = results.treatments.filter(t => t.isSignificant && !t.insufficient);
         const improving = significant.filter(t => t.percentEffect < 0);
@@ -412,10 +457,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const results = Stats.analyzeMultiVariate(groups, treatmentNames);
+        const designCheck = checkFactorialDesign(groups, treatmentNames);
 
-        renderMVSummary(results);
+        renderMVSummary(results, designCheck);
         renderMVEffects(results);
-        renderMVInterpretation(results);
+        renderMVInterpretation(results, designCheck);
 
         mvResults.style.display = 'block';
 
