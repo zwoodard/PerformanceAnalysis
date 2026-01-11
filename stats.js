@@ -308,6 +308,293 @@ const Stats = {
             isSignificant: isSignificant,
             verdict: isSignificant ? (isFaster ? 'faster' : 'slower') : 'inconclusive'
         };
+    },
+
+    // ==========================================
+    // Multi-Variate Analysis Functions
+    // ==========================================
+
+    /**
+     * Analyze multi-variate data to estimate treatment effects
+     * Uses a simple approach: compare groups with/without each treatment
+     * @param {Array} groups - Array of {name, treatments: {treatmentName: bool}, data: [numbers]}
+     * @param {Array} treatmentNames - Array of treatment names
+     */
+    analyzeMultiVariate: function(groups, treatmentNames) {
+        const results = {
+            groups: [],
+            treatments: [],
+            baseline: null,
+            overallMean: 0
+        };
+
+        // Calculate stats for each group
+        let allData = [];
+        groups.forEach(group => {
+            const stats = this.describeSample(group.data);
+            results.groups.push({
+                name: group.name,
+                treatments: group.treatments,
+                stats: stats
+            });
+            allData = allData.concat(group.data);
+        });
+
+        results.overallMean = this.mean(allData);
+
+        // Find baseline (group with no treatments or fewest treatments)
+        let baselineGroup = null;
+        let minTreatments = Infinity;
+        groups.forEach((group, idx) => {
+            const treatmentCount = Object.values(group.treatments).filter(v => v).length;
+            if (treatmentCount < minTreatments) {
+                minTreatments = treatmentCount;
+                baselineGroup = idx;
+            }
+        });
+
+        if (baselineGroup !== null) {
+            results.baseline = results.groups[baselineGroup];
+        }
+
+        // Estimate effect of each treatment
+        treatmentNames.forEach(treatmentName => {
+            const withTreatment = [];
+            const withoutTreatment = [];
+
+            groups.forEach(group => {
+                if (group.treatments[treatmentName]) {
+                    withTreatment.push(...group.data);
+                } else {
+                    withoutTreatment.push(...group.data);
+                }
+            });
+
+            if (withTreatment.length >= 2 && withoutTreatment.length >= 2) {
+                const withMean = this.mean(withTreatment);
+                const withoutMean = this.mean(withoutTreatment);
+                const effect = withMean - withoutMean;
+                const percentEffect = this.percentageChange(withoutMean, withMean);
+                const tTest = this.welchTTest(withoutTreatment, withTreatment);
+
+                results.treatments.push({
+                    name: treatmentName,
+                    effect: effect,
+                    percentEffect: percentEffect,
+                    withMean: withMean,
+                    withoutMean: withoutMean,
+                    withN: withTreatment.length,
+                    withoutN: withoutTreatment.length,
+                    pValue: tTest.pValue,
+                    isSignificant: tTest.pValue < 0.05,
+                    interpretation: this.interpretPValue(tTest.pValue)
+                });
+            } else {
+                results.treatments.push({
+                    name: treatmentName,
+                    effect: null,
+                    percentEffect: null,
+                    insufficient: true,
+                    withN: withTreatment.length,
+                    withoutN: withoutTreatment.length
+                });
+            }
+        });
+
+        return results;
+    },
+
+    // ==========================================
+    // Time Complexity Fitting Functions
+    // ==========================================
+
+    /**
+     * Complexity class definitions
+     */
+    complexityClasses: {
+        'O(1)': {
+            name: 'O(1)',
+            label: 'Constant',
+            transform: (n) => 1,
+            color: '#10b981'
+        },
+        'O(log n)': {
+            name: 'O(log n)',
+            label: 'Logarithmic',
+            transform: (n) => Math.log(n),
+            color: '#3b82f6'
+        },
+        'O(n)': {
+            name: 'O(n)',
+            label: 'Linear',
+            transform: (n) => n,
+            color: '#8b5cf6'
+        },
+        'O(n log n)': {
+            name: 'O(n log n)',
+            label: 'Linearithmic',
+            transform: (n) => n * Math.log(n),
+            color: '#f59e0b'
+        },
+        'O(n²)': {
+            name: 'O(n²)',
+            label: 'Quadratic',
+            transform: (n) => n * n,
+            color: '#ef4444'
+        },
+        'O(n³)': {
+            name: 'O(n³)',
+            label: 'Cubic',
+            transform: (n) => n * n * n,
+            color: '#ec4899'
+        },
+        'O(2ⁿ)': {
+            name: 'O(2ⁿ)',
+            label: 'Exponential',
+            transform: (n) => Math.pow(2, n),
+            color: '#6366f1'
+        }
+    },
+
+    /**
+     * Simple linear regression
+     * @returns {Object} {slope, intercept, rSquared}
+     */
+    linearRegression: function(xValues, yValues) {
+        const n = xValues.length;
+        if (n < 2) return { slope: 0, intercept: 0, rSquared: 0 };
+
+        const sumX = xValues.reduce((a, b) => a + b, 0);
+        const sumY = yValues.reduce((a, b) => a + b, 0);
+        const sumXY = xValues.reduce((total, x, i) => total + x * yValues[i], 0);
+        const sumX2 = xValues.reduce((total, x) => total + x * x, 0);
+        const sumY2 = yValues.reduce((total, y) => total + y * y, 0);
+
+        const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        const intercept = (sumY - slope * sumX) / n;
+
+        // Calculate R-squared
+        const yMean = sumY / n;
+        const ssTotal = yValues.reduce((total, y) => total + Math.pow(y - yMean, 2), 0);
+        const ssResidual = yValues.reduce((total, y, i) => {
+            const predicted = slope * xValues[i] + intercept;
+            return total + Math.pow(y - predicted, 2);
+        }, 0);
+
+        const rSquared = ssTotal === 0 ? 0 : 1 - (ssResidual / ssTotal);
+
+        return { slope, intercept, rSquared: Math.max(0, rSquared) };
+    },
+
+    /**
+     * Fit data to a complexity class
+     * Transforms x values according to the complexity class and performs linear regression
+     */
+    fitComplexity: function(data, complexityClass) {
+        const transform = this.complexityClasses[complexityClass].transform;
+
+        // Transform n values
+        const transformedN = data.map(d => transform(d.n));
+        const times = data.map(d => d.time);
+
+        // Handle edge cases
+        if (transformedN.some(v => !isFinite(v) || isNaN(v))) {
+            return { rSquared: -1, coefficient: 0, constant: 0, invalid: true };
+        }
+
+        const regression = this.linearRegression(transformedN, times);
+
+        return {
+            rSquared: regression.rSquared,
+            coefficient: regression.slope,
+            constant: regression.intercept,
+            complexityClass: complexityClass
+        };
+    },
+
+    /**
+     * Fit data to all complexity classes and find the best fit
+     */
+    fitAllComplexities: function(data) {
+        const results = [];
+        const classNames = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)', 'O(n²)', 'O(n³)'];
+
+        // Only include exponential if data is small enough
+        const maxN = Math.max(...data.map(d => d.n));
+        if (maxN <= 30) {
+            classNames.push('O(2ⁿ)');
+        }
+
+        classNames.forEach(className => {
+            const fit = this.fitComplexity(data, className);
+            if (!fit.invalid) {
+                results.push({
+                    ...fit,
+                    name: className,
+                    label: this.complexityClasses[className].label,
+                    color: this.complexityClasses[className].color
+                });
+            }
+        });
+
+        // Sort by R-squared descending
+        results.sort((a, b) => b.rSquared - a.rSquared);
+
+        // Mark best fit
+        if (results.length > 0) {
+            results[0].isBestFit = true;
+        }
+
+        return results;
+    },
+
+    /**
+     * Generate predicted values for a complexity fit
+     */
+    generatePredictions: function(fit, nValues) {
+        const transform = this.complexityClasses[fit.complexityClass].transform;
+        return nValues.map(n => {
+            const transformedN = transform(n);
+            return Math.max(0, fit.coefficient * transformedN + fit.constant);
+        });
+    },
+
+    /**
+     * Analyze time complexity data
+     */
+    analyzeComplexity: function(data) {
+        // Sort data by n
+        const sortedData = [...data].sort((a, b) => a.n - b.n);
+
+        // Fit all complexity classes
+        const fits = this.fitAllComplexities(sortedData);
+
+        // Get best fit
+        const bestFit = fits.find(f => f.isBestFit) || fits[0];
+
+        // Generate predictions for the best fit
+        const nValues = sortedData.map(d => d.n);
+        const predictions = bestFit ? this.generatePredictions(bestFit, nValues) : [];
+
+        // Determine confidence based on R-squared of best fit
+        let confidence;
+        if (!bestFit || bestFit.rSquared < 0.7) {
+            confidence = { level: 'Low', description: 'Poor fit - data may not follow standard complexity classes' };
+        } else if (bestFit.rSquared < 0.9) {
+            confidence = { level: 'Moderate', description: 'Reasonable fit - some variance unexplained' };
+        } else if (bestFit.rSquared < 0.98) {
+            confidence = { level: 'High', description: 'Good fit - data matches complexity class well' };
+        } else {
+            confidence = { level: 'Very High', description: 'Excellent fit - data closely matches complexity class' };
+        }
+
+        return {
+            data: sortedData,
+            fits: fits,
+            bestFit: bestFit,
+            predictions: predictions,
+            confidence: confidence
+        };
     }
 };
 

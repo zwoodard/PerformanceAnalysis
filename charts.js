@@ -430,12 +430,478 @@ const Charts = {
     },
 
     /**
-     * Render all charts
+     * Render all before/after charts
      */
     renderAll: function(beforeData, afterData, beforeStats, afterStats) {
-        this.drawHistogram('histogram-chart', beforeData, afterData);
-        this.drawBoxPlot('boxplot-chart', beforeData, afterData, beforeStats, afterStats);
-        this.drawScatter('scatter-chart', beforeData, afterData);
+        this.drawHistogram('ba-histogram-chart', beforeData, afterData);
+        this.drawBoxPlot('ba-boxplot-chart', beforeData, afterData, beforeStats, afterStats);
+        this.drawScatter('ba-scatter-chart', beforeData, afterData);
+    },
+
+    // ==========================================
+    // Multi-Variate Charts
+    // ==========================================
+
+    /**
+     * Color palette for multiple groups/treatments
+     */
+    palette: [
+        { main: '#6366f1', light: 'rgba(99, 102, 241, 0.3)' },
+        { main: '#10b981', light: 'rgba(16, 185, 129, 0.3)' },
+        { main: '#f59e0b', light: 'rgba(245, 158, 11, 0.3)' },
+        { main: '#ef4444', light: 'rgba(239, 68, 68, 0.3)' },
+        { main: '#8b5cf6', light: 'rgba(139, 92, 246, 0.3)' },
+        { main: '#ec4899', light: 'rgba(236, 72, 153, 0.3)' },
+        { main: '#14b8a6', light: 'rgba(20, 184, 166, 0.3)' },
+        { main: '#f97316', light: 'rgba(249, 115, 22, 0.3)' }
+    ],
+
+    /**
+     * Draw treatment effects bar chart
+     */
+    drawTreatmentEffects: function(canvasId, treatments) {
+        const { ctx, width, height } = this.prepareCanvas(canvasId);
+        const padding = { top: 30, right: 30, bottom: 60, left: 70 };
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+
+        // Filter out insufficient data
+        const validTreatments = treatments.filter(t => !t.insufficient);
+        if (validTreatments.length === 0) {
+            ctx.fillStyle = this.colors.text;
+            ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Insufficient data for treatment effects', width / 2, height / 2);
+            return;
+        }
+
+        // Find range
+        const effects = validTreatments.map(t => t.percentEffect);
+        const maxEffect = Math.max(...effects.map(Math.abs), 10);
+        const displayRange = maxEffect * 1.2;
+
+        const scaleY = (val) => padding.top + chartHeight / 2 - (val / displayRange) * (chartHeight / 2);
+
+        // Draw grid
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        for (let i = -4; i <= 4; i++) {
+            const y = scaleY((i / 4) * displayRange);
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Draw zero line
+        ctx.strokeStyle = this.colors.textDark;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, scaleY(0));
+        ctx.lineTo(width - padding.right, scaleY(0));
+        ctx.stroke();
+
+        // Draw bars
+        const barWidth = Math.min(60, chartWidth / validTreatments.length * 0.6);
+        const spacing = chartWidth / validTreatments.length;
+
+        validTreatments.forEach((treatment, i) => {
+            const x = padding.left + spacing * i + spacing / 2 - barWidth / 2;
+            const effectY = scaleY(treatment.percentEffect);
+            const zeroY = scaleY(0);
+            const barHeight = Math.abs(effectY - zeroY);
+            const barTop = treatment.percentEffect >= 0 ? effectY : zeroY;
+
+            const color = this.palette[i % this.palette.length];
+            ctx.fillStyle = color.light;
+            ctx.strokeStyle = color.main;
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.rect(x, barTop, barWidth, barHeight);
+            ctx.fill();
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = this.colors.textDark;
+            ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.save();
+            ctx.translate(x + barWidth / 2, height - padding.bottom + 10);
+            ctx.rotate(-Math.PI / 6);
+            ctx.fillText(treatment.name, 0, 0);
+            ctx.restore();
+
+            // Value label
+            const valueY = treatment.percentEffect >= 0 ? effectY - 8 : effectY + barHeight + 14;
+            ctx.fillStyle = treatment.percentEffect < 0 ? '#10b981' : '#ef4444';
+            ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.fillText((treatment.percentEffect > 0 ? '+' : '') + treatment.percentEffect.toFixed(1) + '%', x + barWidth / 2, valueY);
+        });
+
+        // Y-axis labels
+        ctx.fillStyle = this.colors.text;
+        ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let i = -4; i <= 4; i += 2) {
+            const value = (i / 4) * displayRange;
+            ctx.fillText((value > 0 ? '+' : '') + value.toFixed(0) + '%', padding.left - 8, scaleY(value));
+        }
+
+        // Draw axes
+        ctx.strokeStyle = this.colors.textDark;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, height - padding.bottom);
+        ctx.stroke();
+    },
+
+    /**
+     * Draw group comparison bar chart
+     */
+    drawGroupComparison: function(canvasId, groups) {
+        const { ctx, width, height } = this.prepareCanvas(canvasId);
+        const padding = { top: 30, right: 30, bottom: 60, left: 70 };
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+
+        if (groups.length === 0) return;
+
+        // Find range
+        const maxMean = Math.max(...groups.map(g => g.stats.mean + g.stats.stdDev));
+        const displayMax = maxMean * 1.1;
+
+        const scaleY = (val) => padding.top + chartHeight - (val / displayMax) * chartHeight;
+
+        // Draw grid
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding.top + (chartHeight / 5) * i;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Draw bars
+        const barWidth = Math.min(60, chartWidth / groups.length * 0.6);
+        const spacing = chartWidth / groups.length;
+
+        groups.forEach((group, i) => {
+            const x = padding.left + spacing * i + spacing / 2 - barWidth / 2;
+            const meanY = scaleY(group.stats.mean);
+            const barHeight = chartHeight - (meanY - padding.top);
+
+            const color = this.palette[i % this.palette.length];
+
+            // Draw bar
+            ctx.fillStyle = color.light;
+            ctx.strokeStyle = color.main;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.rect(x, meanY, barWidth, barHeight);
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw error bar (std dev)
+            const errorTop = scaleY(group.stats.mean + group.stats.stdDev);
+            const errorBottom = scaleY(Math.max(0, group.stats.mean - group.stats.stdDev));
+            ctx.strokeStyle = color.main;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + barWidth / 2, errorTop);
+            ctx.lineTo(x + barWidth / 2, errorBottom);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + barWidth / 2 - 8, errorTop);
+            ctx.lineTo(x + barWidth / 2 + 8, errorTop);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + barWidth / 2 - 8, errorBottom);
+            ctx.lineTo(x + barWidth / 2 + 8, errorBottom);
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = this.colors.textDark;
+            ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.save();
+            ctx.translate(x + barWidth / 2, height - padding.bottom + 10);
+            ctx.rotate(-Math.PI / 6);
+            ctx.fillText(group.name, 0, 0);
+            ctx.restore();
+
+            // Value label
+            ctx.fillStyle = this.colors.textDark;
+            ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.fillText(group.stats.mean.toFixed(1), x + barWidth / 2, meanY - 8);
+        });
+
+        // Y-axis labels
+        ctx.fillStyle = this.colors.text;
+        ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i <= 5; i++) {
+            const value = displayMax * (1 - i / 5);
+            ctx.fillText(value.toFixed(0), padding.left - 8, padding.top + (chartHeight / 5) * i);
+        }
+
+        // Draw axes
+        ctx.strokeStyle = this.colors.textDark;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, height - padding.bottom);
+        ctx.lineTo(width - padding.right, height - padding.bottom);
+        ctx.stroke();
+    },
+
+    // ==========================================
+    // Time Complexity Charts
+    // ==========================================
+
+    /**
+     * Draw complexity fit chart
+     */
+    drawComplexityFit: function(canvasId, data, bestFit, predictions) {
+        const { ctx, width, height } = this.prepareCanvas(canvasId);
+        const padding = { top: 30, right: 30, bottom: 50, left: 70 };
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+
+        if (data.length === 0) return;
+
+        // Find ranges
+        const nValues = data.map(d => d.n);
+        const times = data.map(d => d.time);
+        const allTimes = [...times, ...predictions];
+
+        const minN = Math.min(...nValues);
+        const maxN = Math.max(...nValues);
+        const nRange = maxN - minN || 1;
+
+        const minTime = 0;
+        const maxTime = Math.max(...allTimes) * 1.1;
+        const timeRange = maxTime - minTime || 1;
+
+        const scaleX = (n) => padding.left + ((n - minN) / nRange) * chartWidth;
+        const scaleY = (t) => padding.top + chartHeight - ((t - minTime) / timeRange) * chartHeight;
+
+        // Draw grid
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding.top + (chartHeight / 5) * i;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Draw fitted line
+        if (bestFit && predictions.length > 0) {
+            ctx.strokeStyle = bestFit.color;
+            ctx.lineWidth = 3;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+
+            // Generate smooth curve
+            const smoothN = [];
+            for (let i = 0; i <= 100; i++) {
+                smoothN.push(minN + (nRange * i) / 100);
+            }
+            const smoothPredictions = Stats.generatePredictions(bestFit, smoothN);
+
+            smoothN.forEach((n, i) => {
+                const x = scaleX(n);
+                const y = scaleY(smoothPredictions[i]);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Legend for fit line
+            ctx.fillStyle = bestFit.color;
+            ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(bestFit.name + ' fit', padding.left + 10, padding.top + 20);
+        }
+
+        // Draw data points
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.6)';
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 2;
+        data.forEach(d => {
+            ctx.beginPath();
+            ctx.arc(scaleX(d.n), scaleY(d.time), 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        });
+
+        // Y-axis labels
+        ctx.fillStyle = this.colors.text;
+        ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i <= 5; i++) {
+            const value = maxTime * (1 - i / 5);
+            ctx.fillText(value.toFixed(1), padding.left - 8, padding.top + (chartHeight / 5) * i);
+        }
+
+        // X-axis labels
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (let i = 0; i <= 5; i++) {
+            const value = minN + (nRange * i) / 5;
+            ctx.fillText(value.toFixed(0), padding.left + (chartWidth * i) / 5, height - padding.bottom + 8);
+        }
+
+        // Axis labels
+        ctx.fillStyle = this.colors.textDark;
+        ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Input Size (n)', width / 2, height - 10);
+
+        ctx.save();
+        ctx.translate(15, height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Time', 0, 0);
+        ctx.restore();
+
+        // Draw axes
+        ctx.strokeStyle = this.colors.textDark;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, height - padding.bottom);
+        ctx.lineTo(width - padding.right, height - padding.bottom);
+        ctx.stroke();
+    },
+
+    /**
+     * Draw complexity class comparison chart
+     */
+    drawComplexityComparison: function(canvasId, data, fits) {
+        const { ctx, width, height } = this.prepareCanvas(canvasId);
+        const padding = { top: 30, right: 120, bottom: 50, left: 70 };
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+
+        if (data.length === 0 || fits.length === 0) return;
+
+        // Find ranges
+        const nValues = data.map(d => d.n);
+        const minN = Math.min(...nValues);
+        const maxN = Math.max(...nValues);
+        const nRange = maxN - minN || 1;
+
+        // Calculate all predictions for scaling
+        let maxTime = Math.max(...data.map(d => d.time));
+        const topFits = fits.slice(0, 4); // Show top 4 fits
+
+        topFits.forEach(fit => {
+            const preds = Stats.generatePredictions(fit, nValues);
+            maxTime = Math.max(maxTime, ...preds);
+        });
+        maxTime *= 1.1;
+
+        const scaleX = (n) => padding.left + ((n - minN) / nRange) * chartWidth;
+        const scaleY = (t) => padding.top + chartHeight - (t / maxTime) * chartHeight;
+
+        // Draw grid
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding.top + (chartHeight / 5) * i;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Draw fitted curves
+        topFits.forEach((fit, idx) => {
+            ctx.strokeStyle = fit.color;
+            ctx.lineWidth = fit.isBestFit ? 3 : 2;
+            ctx.setLineDash(fit.isBestFit ? [] : [5, 5]);
+            ctx.globalAlpha = fit.isBestFit ? 1 : 0.6;
+
+            const smoothN = [];
+            for (let i = 0; i <= 100; i++) {
+                smoothN.push(minN + (nRange * i) / 100);
+            }
+            const preds = Stats.generatePredictions(fit, smoothN);
+
+            ctx.beginPath();
+            smoothN.forEach((n, i) => {
+                const x = scaleX(n);
+                const y = Math.max(padding.top, Math.min(height - padding.bottom, scaleY(preds[i])));
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        });
+
+        ctx.setLineDash([]);
+
+        // Draw data points
+        ctx.fillStyle = 'rgba(31, 41, 55, 0.8)';
+        ctx.strokeStyle = '#1f2937';
+        ctx.lineWidth = 2;
+        data.forEach(d => {
+            ctx.beginPath();
+            ctx.arc(scaleX(d.n), scaleY(d.time), 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        });
+
+        // Draw legend
+        ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'left';
+        topFits.forEach((fit, i) => {
+            const y = padding.top + 20 + i * 22;
+            ctx.fillStyle = fit.color;
+            ctx.fillRect(width - padding.right + 10, y - 6, 20, 12);
+            ctx.fillStyle = this.colors.textDark;
+            ctx.fillText(`${fit.name} (R²=${fit.rSquared.toFixed(3)})`, width - padding.right + 35, y + 2);
+        });
+
+        // Y-axis labels
+        ctx.fillStyle = this.colors.text;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i <= 5; i++) {
+            const value = maxTime * (1 - i / 5);
+            ctx.fillText(value.toFixed(1), padding.left - 8, padding.top + (chartHeight / 5) * i);
+        }
+
+        // X-axis labels
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (let i = 0; i <= 5; i++) {
+            const value = minN + (nRange * i) / 5;
+            ctx.fillText(value.toFixed(0), padding.left + (chartWidth * i) / 5, height - padding.bottom + 8);
+        }
+
+        // Axis labels
+        ctx.fillStyle = this.colors.textDark;
+        ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Input Size (n)', padding.left + chartWidth / 2, height - 10);
+
+        // Draw axes
+        ctx.strokeStyle = this.colors.textDark;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, height - padding.bottom);
+        ctx.lineTo(width - padding.right, height - padding.bottom);
+        ctx.stroke();
     }
 };
 

@@ -10,81 +10,195 @@
     <div class="container">
         <header>
             <h1>Performance Analysis Tool</h1>
-            <p class="subtitle">Compare before/after performance data with statistical confidence</p>
+            <p class="subtitle">Statistical analysis tools for performance testing</p>
         </header>
 
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="before-after">Before/After</button>
+            <button class="tab-btn" data-tab="multivariate">Multi-Variate</button>
+            <button class="tab-btn" data-tab="complexity">Time Complexity</button>
+        </nav>
+
         <main>
-            <section class="input-section">
-                <div class="input-group">
-                    <div class="input-card">
-                        <h2>Before (Control)</h2>
-                        <label for="before-data">Enter timing values (comma or newline separated):</label>
-                        <textarea id="before-data" placeholder="e.g., 120, 135, 128, 142, 131&#10;or one value per line:&#10;120&#10;135&#10;128"></textarea>
-                        <div class="quick-stats" id="before-stats"></div>
+            <!-- Tab 1: Before/After Analysis -->
+            <section class="tab-content active" id="tab-before-after">
+                <div class="tool-description">
+                    <h2>Single Variate Before/After Analysis</h2>
+                    <p>Compare two groups of timing data to determine if there's a statistically significant difference.</p>
+                </div>
+
+                <div class="input-section">
+                    <div class="input-group">
+                        <div class="input-card">
+                            <h3>Before (Control)</h3>
+                            <label for="before-data">Enter timing values (comma or newline separated):</label>
+                            <textarea id="before-data" placeholder="e.g., 120, 135, 128, 142, 131&#10;or one value per line"></textarea>
+                            <div class="quick-stats" id="before-stats"></div>
+                        </div>
+
+                        <div class="input-card">
+                            <h3>After (Treatment)</h3>
+                            <label for="after-data">Enter timing values (comma or newline separated):</label>
+                            <textarea id="after-data" placeholder="e.g., 98, 105, 112, 95, 108&#10;or one value per line"></textarea>
+                            <div class="quick-stats" id="after-stats"></div>
+                        </div>
                     </div>
 
-                    <div class="input-card">
-                        <h2>After (Treatment)</h2>
-                        <label for="after-data">Enter timing values (comma or newline separated):</label>
-                        <textarea id="after-data" placeholder="e.g., 98, 105, 112, 95, 108&#10;or one value per line:&#10;98&#10;105&#10;112"></textarea>
-                        <div class="quick-stats" id="after-stats"></div>
+                    <div class="controls">
+                        <button id="ba-analyze-btn" class="primary-btn">Analyze Performance</button>
+                        <button id="ba-clear-btn" class="secondary-btn">Clear All</button>
+                        <button id="ba-sample-btn" class="secondary-btn">Load Sample Data</button>
                     </div>
                 </div>
 
-                <div class="controls">
-                    <button id="analyze-btn" class="primary-btn">Analyze Performance</button>
-                    <button id="clear-btn" class="secondary-btn">Clear All</button>
-                    <button id="sample-btn" class="secondary-btn">Load Sample Data</button>
-                </div>
+                <section class="results-section" id="ba-results" style="display: none;">
+                    <h2>Analysis Results</h2>
+
+                    <div class="summary-card" id="ba-summary"></div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card" id="ba-before-summary">
+                            <h3>Before (Control)</h3>
+                            <div class="stat-content"></div>
+                        </div>
+                        <div class="stat-card" id="ba-after-summary">
+                            <h3>After (Treatment)</h3>
+                            <div class="stat-content"></div>
+                        </div>
+                        <div class="stat-card" id="ba-comparison-summary">
+                            <h3>Comparison</h3>
+                            <div class="stat-content"></div>
+                        </div>
+                    </div>
+
+                    <div class="charts-section">
+                        <div class="chart-container">
+                            <h3>Distribution Comparison</h3>
+                            <canvas id="ba-histogram-chart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Box Plot Comparison</h3>
+                            <canvas id="ba-boxplot-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-container full-width">
+                        <h3>Data Points Overlay</h3>
+                        <canvas id="ba-scatter-chart"></canvas>
+                    </div>
+
+                    <div class="interpretation-card" id="ba-interpretation"></div>
+                </section>
             </section>
 
-            <section class="results-section" id="results" style="display: none;">
-                <h2>Analysis Results</h2>
-
-                <div class="summary-card" id="summary">
-                    <!-- Summary will be injected here -->
+            <!-- Tab 2: Multi-Variate Analysis -->
+            <section class="tab-content" id="tab-multivariate">
+                <div class="tool-description">
+                    <h2>Multi-Variate Analysis</h2>
+                    <p>Analyze the impact of multiple treatments/variables on performance. Add groups with different treatment combinations to isolate the effect of each variable.</p>
                 </div>
 
-                <div class="stats-grid">
-                    <div class="stat-card" id="before-summary">
-                        <h3>Before (Control)</h3>
-                        <div class="stat-content"></div>
+                <div class="input-section">
+                    <div class="mv-controls">
+                        <div class="treatment-setup">
+                            <h3>Define Treatments</h3>
+                            <div class="treatment-list" id="mv-treatments">
+                                <div class="treatment-item">
+                                    <input type="text" class="treatment-name" placeholder="Treatment name (e.g., 'Caching')" value="Treatment A">
+                                    <button class="remove-treatment-btn" title="Remove">&times;</button>
+                                </div>
+                                <div class="treatment-item">
+                                    <input type="text" class="treatment-name" placeholder="Treatment name (e.g., 'CDN')" value="Treatment B">
+                                    <button class="remove-treatment-btn" title="Remove">&times;</button>
+                                </div>
+                            </div>
+                            <button id="mv-add-treatment" class="secondary-btn small">+ Add Treatment</button>
+                        </div>
                     </div>
-                    <div class="stat-card" id="after-summary">
-                        <h3>After (Treatment)</h3>
-                        <div class="stat-content"></div>
+
+                    <div class="mv-groups" id="mv-groups">
+                        <h3>Data Groups</h3>
+                        <p class="help-text">Add groups with different treatment combinations. Check which treatments are applied to each group.</p>
+
+                        <div class="group-list" id="mv-group-list">
+                            <!-- Groups will be added dynamically -->
+                        </div>
+                        <button id="mv-add-group" class="secondary-btn">+ Add Group</button>
                     </div>
-                    <div class="stat-card" id="comparison-summary">
-                        <h3>Comparison</h3>
-                        <div class="stat-content"></div>
+
+                    <div class="controls">
+                        <button id="mv-analyze-btn" class="primary-btn">Analyze Impact</button>
+                        <button id="mv-clear-btn" class="secondary-btn">Clear All</button>
+                        <button id="mv-sample-btn" class="secondary-btn">Load Sample Data</button>
                     </div>
                 </div>
 
-                <div class="charts-section">
-                    <div class="chart-container">
-                        <h3>Distribution Comparison</h3>
-                        <canvas id="histogram-chart"></canvas>
+                <section class="results-section" id="mv-results" style="display: none;">
+                    <h2>Analysis Results</h2>
+
+                    <div class="summary-card" id="mv-summary"></div>
+
+                    <div class="mv-effects-grid" id="mv-effects"></div>
+
+                    <div class="chart-container full-width">
+                        <h3>Treatment Effects</h3>
+                        <canvas id="mv-effects-chart"></canvas>
                     </div>
-                    <div class="chart-container">
-                        <h3>Box Plot Comparison</h3>
-                        <canvas id="boxplot-chart"></canvas>
+
+                    <div class="chart-container full-width">
+                        <h3>Group Comparison</h3>
+                        <canvas id="mv-groups-chart"></canvas>
+                    </div>
+
+                    <div class="interpretation-card" id="mv-interpretation"></div>
+                </section>
+            </section>
+
+            <!-- Tab 3: Time Complexity Fitter -->
+            <section class="tab-content" id="tab-complexity">
+                <div class="tool-description">
+                    <h2>Time Complexity Fitter</h2>
+                    <p>Enter performance timings for different input sizes to determine the likely time complexity class (O(1), O(log n), O(n), O(n log n), O(n²), etc.).</p>
+                </div>
+
+                <div class="input-section">
+                    <div class="tc-input-area">
+                        <h3>Input Size vs. Timing Data</h3>
+                        <p class="help-text">Enter pairs of input size (n) and timing. One pair per line, separated by comma or space.</p>
+                        <textarea id="tc-data" placeholder="n, time&#10;100, 5&#10;200, 12&#10;400, 45&#10;800, 180&#10;1600, 720"></textarea>
+                    </div>
+
+                    <div class="controls">
+                        <button id="tc-analyze-btn" class="primary-btn">Fit Complexity</button>
+                        <button id="tc-clear-btn" class="secondary-btn">Clear All</button>
+                        <button id="tc-sample-btn" class="secondary-btn">Load Sample Data</button>
                     </div>
                 </div>
 
-                <div class="chart-container full-width">
-                    <h3>Data Points Overlay</h3>
-                    <canvas id="scatter-chart"></canvas>
-                </div>
+                <section class="results-section" id="tc-results" style="display: none;">
+                    <h2>Analysis Results</h2>
 
-                <div class="interpretation-card" id="interpretation">
-                    <!-- Interpretation will be injected here -->
-                </div>
+                    <div class="summary-card" id="tc-summary"></div>
+
+                    <div class="tc-fits-grid" id="tc-fits"></div>
+
+                    <div class="chart-container full-width">
+                        <h3>Actual vs. Fitted Complexity</h3>
+                        <canvas id="tc-fit-chart"></canvas>
+                    </div>
+
+                    <div class="chart-container full-width">
+                        <h3>Complexity Class Comparison</h3>
+                        <canvas id="tc-comparison-chart"></canvas>
+                    </div>
+
+                    <div class="interpretation-card" id="tc-interpretation"></div>
+                </section>
             </section>
         </main>
 
         <footer>
-            <p>Performance Analysis Tool - A simple statistical comparison for performance testing</p>
-            <p class="note">Uses Welch's t-test for comparing means with unequal variances</p>
+            <p>Performance Analysis Tool - Statistical analysis for performance testing</p>
         </footer>
     </div>
 
