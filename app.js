@@ -208,11 +208,13 @@ document.addEventListener('DOMContentLoaded', function() {
         renderComparisonStats(analysis);
         renderInterpretation(analysis);
 
-        // Render charts
-        Charts.renderAll(beforeData, afterData, analysis.before, analysis.after);
-
-        // Show results section
+        // Show results section first so canvases have dimensions
         resultsSection.style.display = 'block';
+
+        // Render charts after browser has laid out the elements
+        requestAnimationFrame(() => {
+            Charts.renderAll(beforeData, afterData, analysis.before, analysis.after);
+        });
 
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
